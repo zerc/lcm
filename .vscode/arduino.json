@@ -1,0 +1,6 @@
+{
+    "sketch": "lcm-home.ino",
+    "output": "build",
+    "board": "arduino:avr:uno",
+    "port": "/dev/tty.usbmodem101"
+}
