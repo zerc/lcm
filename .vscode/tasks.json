@@ -10,11 +10,7 @@
             "group": {
                 "kind": "build",
                 "isDefault": true
-            },
-            "dependsOn": [
-                "Arduino: Verify"
-            ],
-            "dependsOrder": "sequence"
+            }
         }
     ]
 }

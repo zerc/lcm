@@ -7,9 +7,9 @@
 using namespace ace_button;
 
 // Ethernet setup
-bool ethernetActive = true;
-char requestOrigin[50];
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+IPAddress ip(192, 168, 1, 97);
+IPAddress dns(1, 1, 1, 1);
 EthernetServer server(80);
 Application app;
 void changeOutput(Request &req, Response &res);
@@ -96,26 +96,13 @@ void setup()
     // End AceButton setup
 
     // WebServer setup
-    while (Ethernet.begin(mac, 30000UL, 10000UL) == 0)
-    {
-        if (Ethernet.linkStatus() != LinkON)
-        {
-            ethernetActive = false;
-            break;
-        }
-    }
-
-    if (ethernetActive)
-    {
-        app.header("Origin", requestOrigin, 50);
-        app.use(&headers);
-        app.get("/", &getIndex);
-        app.options("/", &cors);
-        app.get("/api/info", &getInfo);
-        app.post("/api/button/all/:state", &changeAll);
-        app.post("/api/button/:number/:state", &changeOutput);
-        server.begin();
-    }
+    Ethernet.begin(mac, ip, dns);
+    app.get("/", &getIndex);
+    app.options("/", &cors);
+    app.get("/api/info", &getInfo);
+    app.post("/api/button/all/:state", &changeAll);
+    app.post("/api/button/:number/:state", &changeOutput);
+    server.begin();
     // End WebServer setup
 }
 
@@ -128,17 +115,12 @@ void loop()
         buttons[i].check();
     }
 
-    if (ethernetActive)
+    EthernetClient client = server.available();
+
+    if (client.connected())
     {
-        Ethernet.maintain();
-
-        EthernetClient client = server.available();
-
-        if (client.connected())
-        {
-            app.process(&client);
-            client.stop();
-        }
+        app.process(&client);
+        client.stop();
     }
 }
 
@@ -231,7 +213,7 @@ void changeAll(Request &req, Response &res)
 
     registerSend();
 
-    res.println("ok");
+    res.println("ok all");
 }
 
 void getInfo(Request &req, Response &res)

@@ -6,14 +6,29 @@
     <style>
         button {
             display: block;
-            width: 50%;
-            margin: 10px;
-            padding: 10px;
+            width: 100%;
+            margin: 15px 0;
+            padding: 15px;
             border-style: solid;
             background-color: bisque;
             cursor: pointer;
             font-size: larger;
             font-weight: bolder;
+        }
+
+        button.all {
+            display: inline-block;
+            width: 45%;
+        }
+
+        button.on {
+            background-color: #8bc34a;
+            float: right;
+        }
+
+        button.off {
+            background-color: #ff9800;
+            margin-right: 15px;
         }
 
         button.active {
@@ -35,7 +50,10 @@
     <h1>Lighting Control System</h1>
     <div id="errors" class="errors"></div>
     <div id="content">
-        <button class="all" onclick="toggleAll(this)">all</button>
+        <hr>
+        <button class="all off" onclick="processAll(this, 0)">all off</button>
+        <button class="all on" onclick="processAll(this, 1)">all on</button>
+        <hr>
     </div>
     <script>
         (() => {
@@ -49,9 +67,17 @@
                 errorPlaceholder.appendChild(error);
             };
 
-            window.toggleAll = function (el) {
-                const state = el.classList.toggle("active") - 0;
+            window.processAll = function (el, state) {
                 fetch(`${baseUrl}/button/all/${state}`, { method: 'POST' })
+                    .then((response) => {
+                        const buttons = document.getElementsByTagName("button");
+                        for (let i = 0; i < buttons.length; i++) {
+                            const b = buttons[i];
+                            if (/^button[0-9]+$/.test(b.id)) {
+                                state ? b.classList.add("active") : b.classList.remove("active");
+                            }
+                        }
+                    })
                     .catch(errorHandler);
             };
 
