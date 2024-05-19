@@ -8,6 +8,14 @@ If `index.html` changed - run `python minimise.py` to compile its `index.ccp` ve
 
 Open the sketch and upload it.
 
+Setup WiFi credentials:
+
+```bash
+cp secrets.example secrets.h
+```
+
+Update the values in `secrets.h`.
+
 
 ## Development
 

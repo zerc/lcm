@@ -1,56 +1,68 @@
+#include "Arduino_LED_Matrix.h"
 #include <aWOT.h>
 #include <SPI.h>
-#include <Ethernet.h>
-#include "index.cpp"
-
+#include <WiFiS3.h>
 #include <AceButton.h>
 using namespace ace_button;
 
-// Ethernet setup
-byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-IPAddress ip(192, 168, 1, 97);
-IPAddress dns(1, 1, 1, 1);
-EthernetServer server(80);
+#include "secrets.h"
+#include "index.cpp"
+
+#ifndef SSID
+#error "SSID is not defined. Please define it in secrets.h"
+#endif
+
+#ifndef PASS
+#error "PASS is not defined. Please define it in secrets.h"
+#endif
+
+// Matrix setup
+ArduinoLEDMatrix matrix;
+// End Matrix setup
+
+// WiFi setup
+WiFiServer server(80);
+char ssid[] = SSID;
+char pass[] = PASS;
+int status = WL_IDLE_STATUS;
 Application app;
 void changeOutput(Request &req, Response &res);
 void changeAll(Request &req, Response &res);
 void getInfo(Request &req, Response &res);
 void getIndex(Request &req, Response &res);
-// void cors(Request &req, Response &res);
 void headers(Request &req, Response &res);
-// End Ethernet setup
+// End WiFi setup
 
 // AceButton configuration
 const uint8_t TOTAL_NUM_BUTTONS = 16;
-const uint8_t HARD_NUM_BUTTONS = 13; // number of buttons available via hardware switches
+const uint8_t HARD_NUM_BUTTONS = 16; // number of buttons available via hardware switches
 
 struct Info
 {
     const uint8_t inputPin;
     const uint8_t outputPin;
     bool outputState;
-    bool isToggle; // can be turned off by repeated activation
+    bool isToggle; // can be turned on/off by repeated activation
+    char *label;
 };
 
 Info INFOS[TOTAL_NUM_BUTTONS] = {
-    {A0, 1, HIGH, true}, // 1
-    {A1, 8, HIGH, true}, // 2
-    {A2, 2, HIGH, true}, // 3
-    {A3, 15, HIGH},      // 4
-    {A4, 3, HIGH},       // 5
-    {A5, 14, HIGH},      // 6
-    {3, 4, HIGH},        // 7
-    {4, 7, HIGH},        // 8
-    {5, 5, HIGH},        // 9
-    {6, 6, HIGH},        // 10
-    {7, 12, HIGH},       // 11
-    {8, 13, HIGH},       // 12
-    {9, 11, HIGH},       // 13
-    // Reserved by the Ethernet shield
-    // https://www.arduino.cc/reference/en/libraries/ethernet/
-    {10, 10, HIGH}, // 14
-    {11, 0, HIGH},  // 15
-    {12, 9, HIGH},  // 16
+    {A0, 2, HIGH, true, "hallway"},           // 3  the same as A2 - two switches should connect to the same output
+    {A1, 8, HIGH, true, "bed 2"},             // 2
+    {A2, 2, HIGH, true, "hallway"},           // 3
+    {8, 15, HIGH, false, "kitchen main"},     // 12
+    {A4, 3, HIGH, false, "bed 1 main"},       // 5
+    {A5, 14, HIGH, false, "bed 1 cup"},       // 6
+    {10, 4, HIGH, false, "kitchen cabinets"}, // 14
+    {7, 13, HIGH, false, "living main"},      // 11
+    {5, 5, HIGH, false, "living dining"},     // 9
+    {6, 12, HIGH, false, "living walls"},     // 10
+    {4, 6, HIGH, false, "button 11"},         // 8
+    {A3, 11, HIGH, false, "hallway 2"},       // 4
+    {9, 7, HIGH, false, "kitchen counter"},   // 13
+    {3, 10, HIGH, false, "button 14"},        // 7
+    {11, 0, HIGH, false, "button 15"},        // 15
+    {12, 9, HIGH, false, "button 16"},        // 16
 };
 
 AceButton buttons[HARD_NUM_BUTTONS];
@@ -65,6 +77,7 @@ const int DATA_PIN = 2;  // Pin connected to Data in (DS) of 74HC595
 // the bits you want to send to the register
 byte BITSTOSEND = 0xFF;
 byte BITSTOSEND2 = 0xFF;
+bool WARMUP = true;
 
 void setup()
 {
@@ -85,29 +98,40 @@ void setup()
         buttons[i].init(INFOS[i].inputPin, INFOS[i].outputState, i);
     }
 
-    registerSend();
-
     ButtonConfig *buttonConfig = ButtonConfig::getSystemButtonConfig();
     buttonConfig->setEventHandler(handleEvent);
-    buttonConfig->setFeature(ButtonConfig::kFeatureClick);
-    buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-    buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-    buttonConfig->setFeature(ButtonConfig::kFeatureRepeatPress);
-    // End AceButton setup
+    buttonConfig->setClickDelay(uint16_t clickDelay)
+        // End AceButton setup
+
+        _changeAll(LOW);
 
     // WebServer setup
-    Ethernet.begin(mac, ip, dns);
+    while (status != WL_CONNECTED)
+    {
+        status = WiFi.begin(ssid, pass);
+        delay(5000);
+    }
+    server.begin();
+
     app.get("/", &getIndex);
-    app.options("/", &cors);
     app.get("/api/info", &getInfo);
     app.post("/api/button/all/:state", &changeAll);
     app.post("/api/button/:number/:state", &changeOutput);
-    server.begin();
     // End WebServer setup
+
+    // Matrix
+    // matrix.begin();
+    // End Matrix
 }
 
 void loop()
 {
+    if (WARMUP)
+    {
+        _changeAll(HIGH);
+        WARMUP = false;
+    }
+
     // Should be called every 4-5ms or faster, for the default debouncing time
     // of ~20ms.
     for (uint8_t i = 0; i < HARD_NUM_BUTTONS; i++)
@@ -115,7 +139,7 @@ void loop()
         buttons[i].check();
     }
 
-    EthernetClient client = server.available();
+    WiFiClient client = server.available();
 
     if (client.connected())
     {
@@ -128,19 +152,33 @@ void loop()
 void handleEvent(AceButton *button, uint8_t eventType, uint8_t buttonState)
 {
     uint8_t id = button->getId();
+
+    if (id == 2)
+    {
+        // edge case: buttons 0 and 2 should change the same output.
+        id = 0;
+    }
+
     uint8_t pin = INFOS[id].outputPin;
 
     switch (eventType)
     {
     case AceButton::kEventPressed:
-        INFOS[id].outputState = !INFOS[id].outputState;
+        if (INFOS[id].isToggle)
+        {
+            INFOS[id].outputState = !INFOS[id].outputState;
+        }
+        else
+        {
+            INFOS[id].outputState = HIGH;
+        }
         registerWriteSend(pin, INFOS[id].outputState);
         break;
     case AceButton::kEventReleased:
         if (!INFOS[id].isToggle)
         {
-            registerWriteSend(pin, LOW);
             INFOS[id].outputState = LOW;
+            registerWriteSend(pin, INFOS[id].outputState);
         }
         break;
     default:
@@ -195,6 +233,7 @@ void changeOutput(Request &req, Response &res)
     registerWriteSend(pin, desiredState);
     INFOS[id].outputState = desiredState;
 
+    res.println(number);
     res.println("ok");
 }
 
@@ -202,18 +241,32 @@ void changeAll(Request &req, Response &res)
 {
     char state[5];
     req.route("state", state, 5);
+    int desiredState = 1 - atoi(state);
 
+    _changeAll(desiredState);
+
+    res.println("ok all");
+}
+
+void _changeAll(int state)
+{
+    if (state)
+    {
+        BITSTOSEND = 0xFF;
+        BITSTOSEND2 = 0xFF;
+    }
+    else
+    {
+        BITSTOSEND = 0x00;
+        BITSTOSEND2 = 0x00;
+    }
     for (int i = 0; i < TOTAL_NUM_BUTTONS; i++)
     {
         int pin = INFOS[i].outputPin;
-        int desiredState = 1 - atoi(state);
-        registerWrite(pin, desiredState);
-        INFOS[i].outputState = desiredState;
+        INFOS[i].outputState = state;
     }
 
     registerSend();
-
-    res.println("ok all");
 }
 
 void getInfo(Request &req, Response &res)
@@ -232,8 +285,8 @@ void getInfo(Request &req, Response &res)
         res.print("\"state\": ");
         res.print(!info.outputState);
         res.print(", ");
-        res.print("\"label\": \"button");
-        res.print(i);
+        res.print("\"label\": \"");
+        res.print(info.label);
         res.print("\"");
         res.print("}");
 
@@ -258,9 +311,4 @@ void headers(Request &req, Response &res)
     res.set("Access-Control-Allow-Origin", origin);
     res.set("Access-Control-Allow-Methods", "GET, HEAD, POST");
     res.set("Access-Control-Allow-Headers", "*");
-}
-
-void cors(Request &req, Response &res)
-{
-    res.sendStatus(204);
 }

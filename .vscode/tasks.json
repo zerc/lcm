@@ -6,7 +6,7 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "arduino-cli upload --input-dir build -b arduino:avr:uno -p /dev/tty.usbmodem101",
+            "command": "arduino-cli upload --input-dir build -b arduino:avr:uno -p /dev/tty.usbmodemF412FA9B42402",
             "group": {
                 "kind": "build",
                 "isDefault": true

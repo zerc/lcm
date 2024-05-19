@@ -1,6 +1,6 @@
 {
     "sketch": "lcm-home.ino",
     "output": "build",
-    "board": "arduino:avr:uno",
-    "port": "/dev/tty.usbmodem101"
+    "board": "arduino:avr:unowifi",
+    "port": "/dev/tty.usbmodemF412FA9B42402"
 }
