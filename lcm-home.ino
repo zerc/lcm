@@ -47,8 +47,8 @@ struct Info
 };
 
 Info INFOS[TOTAL_NUM_BUTTONS] = {
-    {A0, 2, HIGH, true, "hallway"},           // 3  the same as A2 - two switches should connect to the same output
-    {A1, 8, HIGH, true, "bed 2"},             // 2
+    {A0, 2, HIGH, false, "hallway"},           // 3  the same as A2 - two switches should connect to the same output
+    {A1, 8, HIGH, false, "bed 2"},             // 2
     {A2, 2, HIGH, true, "hallway"},           // 3
     {8, 15, HIGH, false, "kitchen main"},     // 12
     {A4, 3, HIGH, false, "bed 1 main"},       // 5
@@ -100,10 +100,9 @@ void setup()
 
     ButtonConfig *buttonConfig = ButtonConfig::getSystemButtonConfig();
     buttonConfig->setEventHandler(handleEvent);
-    buttonConfig->setClickDelay(uint16_t clickDelay)
-        // End AceButton setup
+    // End AceButton setup
 
-        _changeAll(LOW);
+     _changeAll(LOW);
 
     // WebServer setup
     while (status != WL_CONNECTED)
@@ -152,14 +151,13 @@ void loop()
 void handleEvent(AceButton *button, uint8_t eventType, uint8_t buttonState)
 {
     uint8_t id = button->getId();
+    uint8_t pin = INFOS[id].outputPin;
 
     if (id == 2)
     {
         // edge case: buttons 0 and 2 should change the same output.
-        id = 0;
+        pin = INFOS[0].outputPin;
     }
-
-    uint8_t pin = INFOS[id].outputPin;
 
     switch (eventType)
     {
